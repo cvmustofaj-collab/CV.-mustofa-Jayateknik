@@ -1,0 +1,544 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated workshop user profile without PII",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the workshop operator or technician",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "enum": ["operator", "technician", "admin"],
+          "description": "Role inside the workshop application"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "suspended"],
+          "description": "Account activation status managed by Administrator"
+        },
+        "department": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Workshop division or job title"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": ["uid", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Isolated PII record for an authenticated user",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "createdAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted database record granting admin privileges",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "grantedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "grantedBy", "createdAt"]
+    },
+    "AccountInvite": {
+      "title": "AccountInvite",
+      "description": "Pre-authorized Administrator or User account invitation scoped by email",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "enum": ["operator", "technician", "admin"]
+        },
+        "department": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "suspended"]
+        },
+        "claimedUid": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "ownerId", "email", "displayName", "role", "department", "status", "claimedUid", "createdAt", "updatedAt"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Industrial customer record (contains contact PII restricted to owner/admin)",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "company": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "phone": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "email": { "type": "string", "maxLength": 150 },
+        "address": { "type": "string", "maxLength": 400 },
+        "city": { "type": "string", "maxLength": 100 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "totalOrdersCount": { "type": "number" },
+        "joinedDate": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "name",
+        "company",
+        "phone",
+        "email",
+        "address",
+        "city",
+        "notes",
+        "totalOrdersCount",
+        "joinedDate",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Copper wire, insulation, bearing, or workshop sparepart stock item",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "code": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "category": {
+          "type": "string",
+          "enum": ["Kawat Tembaga", "Isolasi & Vernis", "Bearing", "Aksesoris & Part"]
+        },
+        "spec": { "type": "string", "maxLength": 300 },
+        "currentStock": { "type": "number" },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "minStockAlert": { "type": "number" },
+        "unitCost": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "supplier": { "type": "string", "maxLength": 200 },
+        "lastUpdated": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "code",
+        "name",
+        "category",
+        "spec",
+        "currentStock",
+        "unit",
+        "minStockAlert",
+        "unitCost",
+        "sellingPrice",
+        "supplier",
+        "lastUpdated",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WorkOrder": {
+      "title": "WorkOrder",
+      "description": "SPK workshop order with winding data, QC Megger test report, status audit log, and billing",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "spkNumber": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "entryDate": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "targetCompletionDate": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "actualCompletionDate": { "type": "string", "maxLength": 32 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "customerCompany": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "customerPhone": { "type": "string", "maxLength": 40 },
+        "customerAddress": { "type": "string", "maxLength": 400 },
+        "machineType": {
+          "type": "string",
+          "enum": [
+            "Motor 3 Fasa Induksi",
+            "Motor 1 Fasa",
+            "Generator / Alternator Genset",
+            "Transformator (Trafo)",
+            "Pompa Submersible / Celup",
+            "Armature / DC Motor",
+            "Rotor Slip Ring"
+          ]
+        },
+        "brand": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "modelOrType": { "type": "string", "maxLength": 120 },
+        "serialNumber": { "type": "string", "maxLength": 120 },
+        "powerHp": { "type": "number" },
+        "powerKw": { "type": "number" },
+        "rpm": { "type": "number" },
+        "voltage": { "type": "string", "maxLength": 64 },
+        "frequencyHz": { "type": "number" },
+        "currentAmpereRated": { "type": "number" },
+        "frameSize": { "type": "string", "maxLength": 64 },
+        "cosPhi": { "type": "number" },
+        "ipRating": { "type": "string", "maxLength": 32 },
+        "complaint": { "type": "string", "maxLength": 1000 },
+        "inspection": { "type": "object", "description": "Initial inspection native map" },
+        "windingData": { "type": "object", "description": "Stator winding technical specs native map" },
+        "qcReport": { "type": "object", "description": "QC Megger and No-Load test report native map" },
+        "status": {
+          "type": "string",
+          "enum": [
+            "Diterima",
+            "Bongkar & Inspeksi",
+            "Proses Rewinding",
+            "Varnish & Oven",
+            "Assembling",
+            "QC & Pengetesan",
+            "Selesai & Siap Diambil",
+            "Diserahkan / Faktur"
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["Biasa", "Penting", "Urgent / Lembur"]
+        },
+        "technicianName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "invoiceNumber": { "type": "string", "maxLength": 64 },
+        "invoiceDate": { "type": "string", "maxLength": 32 },
+        "fakturPajakNumber": { "type": "string", "maxLength": 64 },
+        "serviceItems": { "type": "array", "description": "Bounded list of service line items (max 50)" },
+        "laborCost": { "type": "number" },
+        "partsCost": { "type": "number" },
+        "discount": { "type": "number" },
+        "taxPpnPercent": { "type": "number" },
+        "taxPpnAmount": { "type": "number" },
+        "taxPphPercent": { "type": "number" },
+        "taxPphAmount": { "type": "number" },
+        "grandTotal": { "type": "number" },
+        "netPayableTotal": { "type": "number" },
+        "downPayment": { "type": "number" },
+        "balanceDue": { "type": "number" },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["Lunas", "DP / Sebagian", "Belum Bayar"]
+        },
+        "warrantyMonths": { "type": "number" },
+        "warrantyNotes": { "type": "string", "maxLength": 1000 },
+        "statusAuditLog": { "type": "array", "description": "Bounded audit log entries (max 100)" },
+        "lastStatusUpdated": { "type": "string", "maxLength": 80 },
+        "lastStatusUpdatedBy": { "type": "string", "maxLength": 120 },
+        "workshopNotes": { "type": "string", "maxLength": 2000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "spkNumber",
+        "entryDate",
+        "targetCompletionDate",
+        "actualCompletionDate",
+        "customerId",
+        "customerName",
+        "customerCompany",
+        "customerPhone",
+        "customerAddress",
+        "machineType",
+        "brand",
+        "modelOrType",
+        "serialNumber",
+        "powerHp",
+        "powerKw",
+        "rpm",
+        "voltage",
+        "frequencyHz",
+        "currentAmpereRated",
+        "frameSize",
+        "cosPhi",
+        "ipRating",
+        "complaint",
+        "inspection",
+        "windingData",
+        "qcReport",
+        "status",
+        "priority",
+        "technicianName",
+        "serviceItems",
+        "laborCost",
+        "partsCost",
+        "discount",
+        "taxPpnPercent",
+        "grandTotal",
+        "downPayment",
+        "balanceDue",
+        "paymentStatus",
+        "warrantyMonths",
+        "warrantyNotes",
+        "statusAuditLog",
+        "lastStatusUpdated",
+        "lastStatusUpdatedBy",
+        "workshopNotes",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WorkshopReport": {
+      "title": "WorkshopReport",
+      "description": "Immutable automatic operational, QC, financial, print, and stock report record persisted on every event",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "reportType": {
+          "type": "string",
+          "enum": [
+            "SPK_CREATED",
+            "QC_MEGGER_TEST",
+            "STATUS_AUDIT",
+            "REVENUE_INVOICE",
+            "DOCUMENT_EXPORTED",
+            "INVENTORY_ADJUSTMENT",
+            "CUSTOMER_ADDED"
+          ]
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "referenceNumber": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "orderId": { "type": "string", "maxLength": 128 },
+        "customerCompany": { "type": "string", "maxLength": 200 },
+        "technicianOrActor": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "verdictOrStatus": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "amountRp": { "type": "number" },
+        "copperKg": { "type": "number" },
+        "meggerMOhm": { "type": "number" },
+        "metrics": { "type": "object", "description": "Structured numeric/string report metrics map" },
+        "sourceAction": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "reportDate": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "reportType",
+        "title",
+        "referenceNumber",
+        "orderId",
+        "customerCompany",
+        "technicianOrActor",
+        "summary",
+        "verdictOrStatus",
+        "amountRp",
+        "copperKg",
+        "meggerMOhm",
+        "metrics",
+        "sourceAction",
+        "reportDate",
+        "createdAt"
+      ]
+    },
+    "WorkshopSettings": {
+      "title": "WorkshopSettings",
+      "description": "Workshop monthly SPK target and per-technician performance target settings",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "monthlySpkTarget": { "type": "number" },
+        "perTechMonthlyTarget": { "type": "number" },
+        "googleSpreadsheetId": { "type": "string", "maxLength": 200 },
+        "googleSpreadsheetTitle": { "type": "string", "maxLength": 200 },
+        "googleSpreadsheetUrl": { "type": "string", "maxLength": 500 },
+        "googleSheetsAutoSync": { "type": "boolean" },
+        "updatedBy": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "monthlySpkTarget",
+        "perTechMonthlyTarget",
+        "updatedBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Authenticated user profiles without PII"
+    },
+    "/users/{userId}/private/{infoId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Isolated PII subcollection for user email"
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted admin lookup table"
+    },
+    "/accountInvites/{inviteId}": {
+      "schema": { "$ref": "#/entities/AccountInvite" },
+      "description": "Pre-authorized Administrator and User account invitations"
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Industrial customer records scoped by ownerId"
+    },
+    "/inventory/{itemId}": {
+      "schema": { "$ref": "#/entities/InventoryItem" },
+      "description": "Workshop copper wire and sparepart inventory scoped by ownerId"
+    },
+    "/workOrders/{orderId}": {
+      "schema": { "$ref": "#/entities/WorkOrder" },
+      "description": "SPK work orders with winding, QC Megger, audit log, and billing data scoped by ownerId"
+    },
+    "/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/WorkshopReport" },
+      "description": "Automatic immutable report entries for QC tests, SPKs, invoices, prints, and stock changes"
+    },
+    "/workshopSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/WorkshopSettings" },
+      "description": "Monthly SPK team and technician target settings scoped by ownerId"
+    }
+  }
+}

@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CV. Mustofa Jaya Teknik - Manajemen Rewinding (Apps Script)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff !important; }
+      @page { margin: 1.2cm; size: A4 portrait; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-900 min-h-screen flex flex-col">
+
+  <!-- TOP HEADER -->
+  <header class="sticky top-0 z-30 bg-slate-900 text-white border-b border-slate-800 no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 shrink-0">
+        <div class="w-9 h-9 bg-amber-500 text-slate-950 font-extrabold rounded-lg flex items-center justify-center">MJT</div>
+        <div>
+          <div class="text-sm sm:text-base font-bold tracking-tight">CV. Mustofa Jaya Teknik</div>
+          <div class="text-[11px] text-slate-400">Google Apps Script + Sheets Edition</div>
+        </div>
+      </div>
+
+      <nav id="desktopNav" class="hidden md:flex items-center gap-1 text-xs font-medium overflow-x-auto">
+        <button data-tab="dashboard" class="nav-btn px-3 py-1.5 rounded-md bg-slate-800 text-amber-400">Dashboard</button>
+        <button data-tab="orders" class="nav-btn px-3 py-1.5 rounded-md text-slate-300 hover:text-white">SPK &amp; Kerja</button>
+        <button data-tab="calculator" class="nav-btn px-3 py-1.5 rounded-md text-slate-300 hover:text-white">Kalkulator</button>
+        <button data-tab="inventory" class="nav-btn px-3 py-1.5 rounded-md text-slate-300 hover:text-white">Inventaris</button>
+        <button data-tab="customers" class="nav-btn px-3 py-1.5 rounded-md text-slate-300 hover:text-white">Pelanggan</button>
+        <button data-tab="ai" class="nav-btn px-3 py-1.5 rounded-md text-amber-300 hover:text-amber-200">Konsultasi AI</button>
+      </nav>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="backupToDrive()" class="hidden sm:inline-flex px-2.5 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700">Backup Drive</button>
+        <button onclick="openNewOrderModal()" class="px-3 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg">+ SPK Baru</button>
+      </div>
+    </div>
+
+    <!-- Mobile Nav -->
+    <div class="flex md:hidden border-t border-slate-800 px-3 py-2 gap-1 overflow-x-auto text-xs">
+      <button data-tab="dashboard" class="nav-btn px-2.5 py-1 rounded bg-amber-500 text-slate-950 font-semibold shrink-0">Dashboard</button>
+      <button data-tab="orders" class="nav-btn px-2.5 py-1 rounded text-slate-300 shrink-0">SPK</button>
+      <button data-tab="calculator" class="nav-btn px-2.5 py-1 rounded text-slate-300 shrink-0">Kalkulator</button>
+      <button data-tab="inventory" class="nav-btn px-2.5 py-1 rounded text-slate-300 shrink-0">Inventaris</button>
+      <button data-tab="customers" class="nav-btn px-2.5 py-1 rounded text-slate-300 shrink-0">Pelanggan</button>
+      <button data-tab="ai" class="nav-btn px-2.5 py-1 rounded text-amber-300 shrink-0">AI Teknis</button>
+    </div>
+  </header>
+
+  <!-- SYNC BANNER -->
+  <div id="loadingBar" class="bg-amber-50 border-b border-amber-200 text-amber-900 text-xs px-4 py-2 text-center no-print">
+    Menyinkronkan database Google Sheets...
+  </div>
+
+  <!-- MAIN VIEWPORT -->
+  <main id="appRoot" class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6 no-print"></main>
+
+  <!-- PRINT VIEWPORT -->
+  <section id="printViewport" class="hidden print:block max-w-4xl mx-auto p-6 bg-white text-slate-900"></section>
+
+  <!-- MODALS -->
+  <div id="modalOverlay" class="fixed inset-0 z-50 hidden bg-slate-950/70 backdrop-blur-xs items-center justify-center p-4 no-print">
+    <div id="modalCard" class="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col"></div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toastBox" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0 no-print"></div>
+
+  <script>
+    // =========================================================================
+    // STATE & GOOGLE APPS SCRIPT BRIDGE
+    // =========================================================================
+    const isGasEnv = typeof google !== 'undefined' && google.script && google.script.run;
+
+    const STATUS_LIST = [
+      'Diterima',
+      'Bongkar & Inspeksi',
+      'Proses Rewinding',
+      'Varnish & Oven',
+      'Assembling',
+      'QC & Pengetesan',
+      'Selesai & Siap Diambil',
+      'Diserahkan / Faktur'
+    ];
+
+    let state = {
+      activeTab: 'dashboard',
+      orders: [],
+      customers: [],
+      inventory: [],
+      spreadsheetUrl: '',
+      searchOrder: '',
+      forecastMonths: 2,
+      deadlineDays: 5,
+      aiAnswer: '',
+      aiLoading: false
+    };
+
+    function formatRupiah(n) {
+      return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n || 0);
+    }
+
+    function showToast(msg, type = 'success') {
+      const box = document.getElementById('toastBox');
+      const el = document.createElement('div');
+      const border = type === 'error' ? 'border-rose-500/40' : type === 'warning' ? 'border-amber-500/40' : 'border-emerald-500/40';
+      el.className = `pointer-events-auto p-3 bg-slate-900 text-white text-xs rounded-xl shadow-xl border ${border}`;
+      el.textContent = msg;
+      box.appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
+
+    function gasCall(fnName, ...args) {
+      return new Promise((resolve, reject) => {
+        if (!isGasEnv) {
+          resolve(null);
+          return;
+        }
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)[fnName](...args);
+      });
+    }
+
+    async function loadInitialData() {
+      const bar = document.getElementById('loadingBar');
+      if (isGasEnv) {
+        try {
+          const data = await gasCall('getAllWorkshopData');
+          state.orders = data.orders || [];
+          state.customers = data.customers || [];
+          state.inventory = data.inventory || [];
+          state.spreadsheetUrl = data.spreadsheetUrl || '';
+          bar.classList.add('hidden');
+        } catch (err) {
+          bar.textContent = 'Gagal memuat Google Sheets: ' + err.message;
+        }
+      } else {
+        // Fallback preview jika dibuka di luar Google Apps Script
+        state.orders = JSON.parse(localStorage.getItem('mjt_gas_orders') || '[]');
+        state.customers = JSON.parse(localStorage.getItem('mjt_gas_customers') || '[]');
+        state.inventory = JSON.parse(localStorage.getItem('mjt_gas_inventory') || '[]');
+        bar.textContent = 'Mode Preview Lokal (Deploy ke Google Apps Script untuk sinkronisasi Google Sheets otomatis)';
+      }
+      render();
+    }
+
+    async function persistOrders() {
+      if (isGasEnv) {
+        await gasCall('saveWorkOrders', state.orders);
+      } else {
+        localStorage.setItem('mjt_gas_orders', JSON.stringify(state.orders));
+      }
+    }
+
+    async function persistCustomers() {
+      if (isGasEnv) {
+        await gasCall('saveCustomers', state.customers);
+      } else {
+        localStorage.setItem('mjt_gas_customers', JSON.stringify(state.customers));
+      }
+    }
+
+    async function persistInventory() {
+      if (isGasEnv) {
+        await gasCall('saveInventory', state.inventory);
+      } else {
+        localStorage.setItem('mjt_gas_inventory', JSON.stringify(state.inventory));
+      }
+    }
+
+    // =========================================================================
+    // NAVIGATION & RENDERER
+    // =========================================================================
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.activeTab = btn.getAttribute('data-tab');
+        updateNavHighlight();
+        render();
+      });
+    });
+
+    function updateNavHighlight() {
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        const isCurrent = btn.getAttribute('data-tab') === state.activeTab;
+        if (isCurrent) {
+          btn.className = 'nav-btn px-3 py-1.5 rounded-md bg-slate-800 text-amber-400 font-semibold shrink-0';
+        } else {
+          btn.className = 'nav-btn px-3 py-1.5 rounded-md text-slate-300 hover:text-white shrink-0';
+        }
+      });
+    }
+
+    function render() {
+      const root = document.getElementById('appRoot');
+      if (state.activeTab === 'dashboard') root.innerHTML = renderDashboard();
+      else if (state.activeTab === 'orders') root.innerHTML = renderOrders();
+      else if (state.activeTab === 'calculator') root.innerHTML = renderCalculator();
+      else if (state.activeTab === 'inventory') root.innerHTML = renderInventory();
+      else if (state.activeTab === 'customers') root.innerHTML = renderCustomers();
+      else if (state.activeTab === 'ai') root.innerHTML = renderAiConsult();
+    }
+
+    // =========================================================================
+    // DASHBOARD VIEW (KPI + DEADLINE REMINDER + REVENUE + COPPER STOCK)
+    // =========================================================================
+    function renderDashboard() {
+      const orders = state.orders;
+      const activeOrders = orders.filter(o => o.status !== 'Diserahkan / Faktur');
+      const inProcess = orders.filter(o => o.status === 'Proses Rewinding' || o.status === 'Varnish & Oven').length;
+      const totalPaid = orders.reduce((s, o) => s + (o.paymentStatus === 'Lunas' ? (o.grandTotal || 0) : (o.downPayment || 0)), 0);
+      const totalPending = orders.reduce((s, o) => s + (o.balanceDue || 0), 0);
+
+      // Deadline Reminders
+      const now = new Date();
+      const todayMid = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const deadlines = orders
+        .filter(o => o.status !== 'Selesai & Siap Diambil' && o.status !== 'Diserahkan / Faktur' && o.targetCompletionDate)
+        .map(o => {
+          const p = o.targetCompletionDate.split('-').map(Number);
+          const tMs = new Date(p[0], p[1] - 1, p[2]).getTime();
+          const diff = Math.round((tMs - todayMid) / 86400000);
+          return { order: o, diff };
+        })
+        .filter(x => x.diff <= state.deadlineDays)
+        .sort((a, b) => a.diff - b.diff);
+
+      // Copper Wire Usage Analysis
+      const wireMap = {};
+      let totalCopperKg = 0;
+      orders.forEach(o => {
+        const kg = Number(o.windingData?.copperWeightKg || 0);
+        const mm = Number(o.windingData?.wireSizeMm || 0);
+        totalCopperKg += kg;
+        if (mm > 0) {
+          const key = mm.toFixed(2);
+          if (!wireMap[key]) wireMap[key] = { mm: key, totalKg: 0, count: 0, wipKg: 0 };
+          wireMap[key].totalKg += kg;
+          wireMap[key].count += 1;
+          if (['Diterima', 'Bongkar & Inspeksi', 'Proses Rewinding'].includes(o.status)) {
+            wireMap[key].wipKg += kg;
+          }
+        }
+      });
+
+      const copperRows = Object.values(wireMap).sort((a, b) => b.totalKg - a.totalKg).map(w => {
+        const inv = state.inventory.find(i => i.category === 'Kawat Tembaga' && (i.name.includes(w.mm) || i.code.includes(w.mm.replace('.', ''))));
+        const stock = inv ? Number(inv.currentStock) : null;
+        const monthlyBurn = Number((w.totalKg / 6).toFixed(1));
+        const need = stock !== null ? Math.max(0, Math.ceil((monthlyBurn * state.forecastMonths + (inv.minStockAlert || 15) + w.wipKg) - stock)) : Math.ceil(monthlyBurn * state.forecastMonths + 15);
+        return `
+          <tr class="border-t border-slate-100 hover:bg-slate-50">
+            <td class="py-2 px-3 font-mono font-bold">Ø ${w.mm} mm</td>
+            <td class="py-2 px-3 text-right font-mono">${w.totalKg.toFixed(1)} kg (${w.count} SPK)</td>
+            <td class="py-2 px-3 text-right font-mono">${monthlyBurn} kg/bln</td>
+            <td class="py-2 px-3 text-right font-mono ${stock !== null && stock <= (inv?.minStockAlert || 15) ? 'text-rose-600 font-bold' : 'text-emerald-700 font-semibold'}">${stock !== null ? stock + ' kg' : 'Non-stok'}</td>
+            <td class="py-2 px-3 text-right font-mono font-bold text-amber-700">${need > 0 ? '+' + need + ' kg' : 'Cukup'}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const deadlineHtml = deadlines.length === 0
+        ? `<div class="p-6 text-center text-xs text-slate-500">Tidak ada SPK mendekati tenggat ≤ ${state.deadlineDays} hari.</div>`
+        : deadlines.map(({ order, diff }) => {
+            const label = diff < 0 ? `Lewat ${Math.abs(diff)} Hr` : diff === 0 ? 'Hari Ini (H-0)' : diff === 1 ? 'Besok (H-1)' : `H-${diff}`;
+            const badge = diff <= 0 ? 'bg-rose-600 text-white' : diff === 1 ? 'bg-amber-500 text-slate-950' : 'bg-sky-100 text-sky-900';
+            return `
+              <div onclick="openOrderModal('${order.id}')" class="p-3.5 border-t border-slate-100 hover:bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer">
+                <div>
+                  <div class="flex items-center gap-2 text-xs">
+                    <span class="px-2 py-0.5 rounded font-mono font-bold text-[11px] ${badge}">${label}</span>
+                    <span class="font-mono font-bold text-slate-900">${order.spkNumber}</span>
+                    <span class="text-slate-500">· ${order.customerCompany || order.customerName}</span>
+                  </div>
+                  <div class="text-xs font-semibold text-slate-800 mt-1">${order.brand} ${order.powerHp} HP · Tahap: ${order.status} · PIC: ${order.technicianName}</div>
+                </div>
+                <div class="text-xs font-mono text-slate-600">Target: ${order.targetCompletionDate}</div>
+              </div>
+            `;
+          }).join('');
+
+      return `
+        <div class="bg-slate-900 text-white rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div class="text-xs text-amber-400 font-semibold">CV. Mustofa Jaya Teknik — Google Sheets Database</div>
+            <h1 class="text-xl font-bold mt-0.5">Dashboard Operasional Bengkel Rewinding</h1>
+            <p class="text-xs text-slate-400 mt-0.5">Sinkronisasi real-time SPK, stok kawat Class H 200°C, dan pengingat tenggat teknisi.</p>
+          </div>
+          ${state.spreadsheetUrl ? `<a href="${state.spreadsheetUrl}" target="_blank" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shrink-0">Buka Google Sheets</a>` : ''}
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-white p-4 rounded-xl border border-slate-200">
+            <div class="text-xs text-slate-500">Unit Aktif Bengkel</div>
+            <div class="text-2xl font-bold font-mono mt-1">${activeOrders.length} <span class="text-xs font-normal text-slate-500">unit</span></div>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-slate-200">
+            <div class="text-xs text-slate-500">Proses Gulung &amp; Oven</div>
+            <div class="text-2xl font-bold font-mono text-amber-600 mt-1">${inProcess} <span class="text-xs font-normal text-slate-500">unit</span></div>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-slate-200">
+            <div class="text-xs text-slate-500">Total Paid Revenue</div>
+            <div class="text-xl font-bold font-mono text-emerald-600 mt-1">${formatRupiah(totalPaid)}</div>
+          </div>
+          <div class="bg-white p-4 rounded-xl border border-slate-200">
+            <div class="text-xs text-slate-500">Total Pending Revenue</div>
+            <div class="text-xl font-bold font-mono text-amber-600 mt-1">${formatRupiah(totalPending)}</div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div class="p-4 flex flex-wrap items-center justify-between gap-2 bg-slate-50 border-b border-slate-200">
+            <div>
+              <h2 class="text-sm font-bold text-slate-900">Pengingat Tenggat Waktu SPK &amp; Prioritas Teknisi</h2>
+              <p class="text-xs text-slate-500">SPK aktif mendekati target penyelesaian (≤ ${state.deadlineDays} hari)</p>
+            </div>
+            <div class="flex gap-1 text-xs">
+              ${[1, 3, 5, 7].map(d => `<button onclick="state.deadlineDays=${d};render()" class="px-2.5 py-1 rounded ${state.deadlineDays === d ? 'bg-slate-900 text-white font-bold' : 'bg-white border border-slate-200 text-slate-600'}">≤ ${d} Hr</button>`).join('')}
+            </div>
+          </div>
+          <div>${deadlineHtml}</div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div class="p-4 flex flex-wrap items-center justify-between gap-2 bg-slate-50 border-b border-slate-200">
+            <div>
+              <h2 class="text-sm font-bold text-slate-900">Analisis Penggunaan Kawat Tembaga &amp; Estimasi Stok</h2>
+              <p class="text-xs text-slate-500">Total konsumsi riwayat SPK: <strong>${totalCopperKg.toFixed(1)} kg</strong></p>
+            </div>
+            <div class="flex gap-1 text-xs">
+              ${[1, 2, 3].map(m => `<button onclick="state.forecastMonths=${m};render()" class="px-2.5 py-1 rounded ${state.forecastMonths === m ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-white border border-slate-200 text-slate-600'}">Target ${m} Bln</button>`).join('')}
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 text-slate-600">
+                <tr>
+                  <th class="py-2 px-3">Diameter</th>
+                  <th class="py-2 px-3 text-right">Total Pakai</th>
+                  <th class="py-2 px-3 text-right">Laju/Bln</th>
+                  <th class="py-2 px-3 text-right">Stok Gudang</th>
+                  <th class="py-2 px-3 text-right">Saran Beli (${state.forecastMonths} Bln)</th>
+                </tr>
+              </thead>
+              <tbody>${copperRows || '<tr><td colspan="5" class="p-4 text-center text-slate-400">Belum ada data gulungan</td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // ORDERS VIEW
+    // =========================================================================
+    function renderOrders() {
+      const q = state.searchOrder.toLowerCase();
+      const filtered = state.orders.filter(o =>
+        (o.spkNumber || '').toLowerCase().includes(q) ||
+        (o.customerCompany || '').toLowerCase().includes(q) ||
+        (o.brand || '').toLowerCase().includes(q)
+      );
+
+      const rows = filtered.map(o => `
+        <tr class="border-t border-slate-100 hover:bg-slate-50 text-xs">
+          <td class="py-3 px-3 font-mono font-bold text-slate-900">${o.spkNumber}</td>
+          <td class="py-3 px-3">
+            <div class="font-semibold text-slate-900">${o.customerCompany || o.customerName}</div>
+            <div class="text-[11px] text-slate-500">${o.brand} ${o.powerHp} HP · ${o.technicianName}</div>
+          </td>
+          <td class="py-3 px-3">
+            <select onchange="quickUpdateStatus('${o.id}', this.value)" class="bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs">
+              ${STATUS_LIST.map(st => `<option value="${st}" ${o.status === st ? 'selected' : ''}>${st}</option>`).join('')}
+            </select>
+          </td>
+          <td class="py-3 px-3 text-right font-mono font-bold">${formatRupiah(o.grandTotal)}</td>
+          <td class="py-3 px-3 text-right space-x-1">
+            <button onclick="openOrderModal('${o.id}')" class="px-2.5 py-1 bg-slate-900 text-white rounded text-[11px] font-semibold">Detail</button>
+            <button onclick="printOrderDoc('${o.id}', 'spk')" class="px-2 py-1 bg-amber-100 text-amber-900 rounded text-[11px] font-semibold">Cetak</button>
+            <button onclick="deleteOrder('${o.id}')" class="px-2 py-1 bg-rose-100 text-rose-700 rounded text-[11px]">Hapus</button>
+          </td>
+        </tr>
+      `).join('');
+
+      return `
+        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div class="p-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h2 class="text-sm font-bold text-slate-900">Daftar SPK &amp; Pengerjaan (${filtered.length})</h2>
+            <input type="text" value="${state.searchOrder}" oninput="state.searchOrder=this.value;render()" placeholder="Cari No. SPK, pelanggan, atau merk..." class="px-3 py-1.5 text-xs border border-slate-200 rounded-lg w-full sm:w-64" />
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left">
+              <thead class="bg-slate-50 text-[11px] text-slate-600">
+                <tr>
+                  <th class="py-2.5 px-3">No. SPK</th>
+                  <th class="py-2.5 px-3">Pelanggan &amp; Mesin</th>
+                  <th class="py-2.5 px-3">Status</th>
+                  <th class="py-2.5 px-3 text-right">Total Biaya</th>
+                  <th class="py-2.5 px-3 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>${rows || '<tr><td colspan="5" class="p-6 text-center text-xs text-slate-400">Tidak ada SPK ditemukan</td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // CALCULATOR VIEW
+    // =========================================================================
+    function renderCalculator() {
+      return `
+        <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4 max-w-2xl">
+          <h2 class="text-sm font-bold text-slate-900">Kalkulator Persamaan Kawat Paralel &amp; FLA 3-Fasa</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label class="font-semibold text-slate-600 block mb-1">Diameter Kawat Asli (mm)</label>
+              <input id="calcOrigDia" type="number" step="0.05" value="1.20" oninput="runCalc()" class="w-full p-2 border border-slate-200 rounded-lg font-mono" />
+            </div>
+            <div>
+              <label class="font-semibold text-slate-600 block mb-1">Jumlah Paralel Asli</label>
+              <input id="calcOrigPar" type="number" value="1" oninput="runCalc()" class="w-full p-2 border border-slate-200 rounded-lg font-mono" />
+            </div>
+            <div>
+              <label class="font-semibold text-slate-600 block mb-1">Target Paralel Baru</label>
+              <input id="calcTargetPar" type="number" value="2" oninput="runCalc()" class="w-full p-2 border border-slate-200 rounded-lg font-mono" />
+            </div>
+          </div>
+          <div id="calcOutput" class="p-4 bg-slate-900 text-white rounded-xl text-xs font-mono">
+            Diameter pengganti ideal per kawat: <strong class="text-amber-400 text-lg">Ø 0.849 mm</strong>
+          </div>
+        </div>
+      `;
+    }
+
+    function runCalc() {
+      const d = parseFloat(document.getElementById('calcOrigDia').value || 0);
+      const p1 = parseInt(document.getElementById('calcOrigPar').value || 1, 10);
+      const p2 = parseInt(document.getElementById('calcTargetPar').value || 1, 10);
+      const area = (Math.PI * d * d / 4) * p1;
+      const reqDia = Math.sqrt((4 * (area / Math.max(1, p2))) / Math.PI);
+      document.getElementById('calcOutput').innerHTML = `Total Luas Penampang: <strong>${area.toFixed(4)} mm²</strong><br/>Diameter pengganti ideal per kawat (${p2}x paralel): <strong class="text-amber-400 text-lg">Ø ${reqDia.toFixed(3)} mm</strong>`;
+    }
+
+    // =========================================================================
+    // INVENTORY & CUSTOMERS VIEWS
+    // =========================================================================
+    function renderInventory() {
+      const rows = state.inventory.map(item => `
+        <tr class="border-t border-slate-100 text-xs">
+          <td class="py-2.5 px-3 font-mono font-bold">${item.code}</td>
+          <td class="py-2.5 px-3">
+            <div class="font-semibold">${item.name}</div>
+            <div class="text-[11px] text-slate-500">${item.category} · ${item.spec}</div>
+          </td>
+          <td class="py-2.5 px-3 text-right font-mono font-bold ${item.currentStock <= item.minStockAlert ? 'text-rose-600' : 'text-emerald-700'}">${item.currentStock} ${item.unit}</td>
+          <td class="py-2.5 px-3 text-right space-x-1">
+            <button onclick="adjustStock('${item.id}', 5)" class="px-2 py-1 bg-emerald-100 text-emerald-800 rounded font-bold">+5</button>
+            <button onclick="adjustStock('${item.id}', -5)" class="px-2 py-1 bg-rose-100 text-rose-800 rounded font-bold">-5</button>
+          </td>
+        </tr>
+      `).join('');
+      return `
+        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div class="p-4 border-b border-slate-200 flex items-center justify-between">
+            <h2 class="text-sm font-bold">Inventaris Material Bengkel</h2>
+          </div>
+          <table class="w-full text-left">
+            <thead class="bg-slate-50 text-[11px] text-slate-600">
+              <tr><th class="py-2 px-3">Kode</th><th class="py-2 px-3">Material</th><th class="py-2 px-3 text-right">Stok</th><th class="py-2 px-3 text-right">Sesuaikan</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderCustomers() {
+      const cards = state.customers.map(c => `
+        <div class="bg-white p-4 rounded-xl border border-slate-200 space-y-1 text-xs">
+          <div class="font-bold text-sm text-slate-900">${c.company}</div>
+          <div class="text-slate-600">Kontak: ${c.name} · ${c.phone}</div>
+          <div class="text-slate-500">${c.address} (${c.city})</div>
+        </div>
+      `).join('');
+      return `<div class="grid grid-cols-1 md:grid-cols-3 gap-4">${cards}</div>`;
+    }
+
+    function renderAiConsult() {
+      return `
+        <div class="bg-white rounded-xl border border-slate-200 p-5 space-y-4 max-w-3xl">
+          <h2 class="text-sm font-bold text-slate-900">Konsultasi Teknis Gemini AI (via Apps Script UrlFetchApp)</h2>
+          <textarea id="aiPrompt" rows="3" class="w-full p-3 text-xs border border-slate-200 rounded-lg" placeholder="Contoh: Berapa rekomendasi tahanan isolasi Megger minimal motor 380V sesuai standar IEEE 43?"></textarea>
+          <button onclick="sendAiPrompt()" class="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg">${state.aiLoading ? 'Memproses...' : 'Tanya Gemini AI'}</button>
+          ${state.aiAnswer ? `<div class="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs whitespace-pre-wrap">${state.aiAnswer}</div>` : ''}
+        </div>
+      `;
+    }
+
+    async function sendAiPrompt() {
+      const prompt = document.getElementById('aiPrompt').value.trim();
+      if (!prompt) return;
+      state.aiLoading = true;
+      render();
+      if (isGasEnv) {
+        const res = await gasCall('askGeminiTechnical', prompt);
+        state.aiAnswer = res.error ? 'Error: ' + res.error : res.answer;
+      } else {
+        state.aiAnswer = 'Fungsi ini berjalan langsung menggunakan UrlFetchApp setelah dideploy di Google Apps Script.';
+      }
+      state.aiLoading = false;
+      render();
+    }
+
+    // =========================================================================
+    // ACTIONS & MODALS
+    // =========================================================================
+    async function quickUpdateStatus(orderId, newStatus) {
+      const o = state.orders.find(x => x.id === orderId);
+      if (!o) return;
+      o.status = newStatus;
+      o.lastStatusUpdated = new Date().toLocaleString('id-ID') + ' WIB';
+      o.lastStatusUpdatedBy = o.technicianName;
+      if (!o.statusAuditLog) o.statusAuditLog = [];
+      o.statusAuditLog.unshift({ timestamp: new Date().toISOString(), formattedDate: o.lastStatusUpdated, newStatus, updatedBy: o.technicianName });
+      await persistOrders();
+      showToast(`Status ${o.spkNumber} diperbarui menjadi ${newStatus}`);
+      render();
+    }
+
+    async function adjustStock(id, delta) {
+      const item = state.inventory.find(i => i.id === id);
+      if (!item) return;
+      item.currentStock = Math.max(0, Number((item.currentStock + delta).toFixed(2)));
+      item.lastUpdated = new Date().toISOString().split('T')[0];
+      await persistInventory();
+      showToast(`Stok ${item.name} diperbarui: ${item.currentStock} ${item.unit}`);
+      render();
+    }
+
+    async function deleteOrder(id) {
+      if (!confirm('Hapus SPK ini dari Google Sheets?')) return;
+      state.orders = state.orders.filter(o => o.id !== id);
+      await persistOrders();
+      showToast('SPK dihapus');
+      render();
+    }
+
+    async function backupToDrive() {
+      if (!isGasEnv) {
+        showToast('Fitur Backup Drive aktif setelah deploy ke Google Apps Script', 'warning');
+        return;
+      }
+      const res = await gasCall('exportBackupToDrive');
+      showToast(`Backup ${res.fileName} tersimpan di Google Drive!`);
+    }
+
+    function openNewOrderModal() {
+      const overlay = document.getElementById('modalOverlay');
+      const card = document.getElementById('modalCard');
+      overlay.classList.remove('hidden');
+      overlay.classList.add('flex');
+      card.innerHTML = `
+        <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+          <span class="font-bold text-sm">Buat SPK Baru (Google Sheets)</span>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-white">✕</button>
+        </div>
+        <form onsubmit="submitNewOrder(event)" class="p-5 space-y-3 text-xs overflow-y-auto">
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="font-semibold block mb-1">Perusahaan Pelanggan</label><input id="newCust" required class="w-full p-2 border rounded-lg" /></div>
+            <div><label class="font-semibold block mb-1">Merk / Tipe Motor</label><input id="newBrand" required class="w-full p-2 border rounded-lg" value="Siemens" /></div>
+            <div><label class="font-semibold block mb-1">Daya (HP)</label><input id="newHp" type="number" required class="w-full p-2 border rounded-lg" value="20" /></div>
+            <div><label class="font-semibold block mb-1">Target Selesai</label><input id="newTarget" type="date" required class="w-full p-2 border rounded-lg" value="${new Date(Date.now()+3*86400000).toISOString().split('T')[0]}" /></div>
+            <div><label class="font-semibold block mb-1">Teknisi PIC</label><input id="newTech" required class="w-full p-2 border rounded-lg" value="Mustofa" /></div>
+            <div><label class="font-semibold block mb-1">Estimasi Biaya (Rp)</label><input id="newCost" type="number" required class="w-full p-2 border rounded-lg" value="4500000" /></div>
+          </div>
+          <button type="submit" class="w-full py-2.5 bg-amber-500 font-bold text-slate-950 rounded-lg">Simpan SPK ke Google Sheets</button>
+        </form>
+      `;
+    }
+
+    async function submitNewOrder(e) {
+      e.preventDefault();
+      const total = Number(document.getElementById('newCost').value || 0);
+      const newOrder = {
+        id: 'WO-' + Date.now(),
+        spkNumber: 'SPK-MJT-' + new Date().getFullYear() + '-' + Math.floor(100 + Math.random() * 899),
+        entryDate: new Date().toISOString().split('T')[0],
+        targetCompletionDate: document.getElementById('newTarget').value,
+        customerCompany: document.getElementById('newCust').value,
+        customerName: document.getElementById('newCust').value,
+        machineType: 'Motor 3 Fasa Induksi',
+        brand: document.getElementById('newBrand').value,
+        powerHp: Number(document.getElementById('newHp').value || 0),
+        powerKw: Number((Number(document.getElementById('newHp').value || 0) * 0.7457).toFixed(1)),
+        status: 'Diterima',
+        priority: 'Biasa',
+        technicianName: document.getElementById('newTech').value,
+        windingData: { wireSizeMm: 1.15, copperWeightKg: 12 },
+        grandTotal: total,
+        downPayment: 0,
+        balanceDue: total,
+        paymentStatus: 'Belum Bayar'
+      };
+      state.orders.unshift(newOrder);
+      await persistOrders();
+      closeModal();
+      showToast('SPK baru tersimpan ke Google Sheets!');
+      render();
+    }
+
+    function openOrderModal(orderId) {
+      const o = state.orders.find(x => x.id === orderId);
+      if (!o) return;
+      const overlay = document.getElementById('modalOverlay');
+      const card = document.getElementById('modalCard');
+      overlay.classList.remove('hidden');
+      overlay.classList.add('flex');
+      card.innerHTML = `
+        <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+          <span class="font-bold text-sm">${o.spkNumber} — ${o.brand} ${o.powerHp} HP</span>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-white">✕</button>
+        </div>
+        <div class="p-5 space-y-3 text-xs overflow-y-auto">
+          <div><strong>Pelanggan:</strong> ${o.customerCompany}</div>
+          <div><strong>Teknisi PIC:</strong> ${o.technicianName}</div>
+          <div><strong>Status Saat Ini:</strong> ${o.status}</div>
+          <div><strong>Update Terakhir:</strong> ${o.lastStatusUpdated || '-'}</div>
+          <div><strong>Kawat &amp; Berat:</strong> Ø ${o.windingData?.wireSizeMm || '-'} mm · ${o.windingData?.copperWeightKg || 0} kg</div>
+          <div><strong>Total Biaya:</strong> ${formatRupiah(o.grandTotal)} (${o.paymentStatus})</div>
+          <div class="pt-3 flex gap-2">
+            <button onclick="printOrderDoc('${o.id}', 'spk'); closeModal();" class="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-lg">Cetak / Simpan PDF</button>
+            <button onclick="closeModal()" class="px-4 py-2 bg-slate-200 rounded-lg font-semibold">Tutup</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function printOrderDoc(orderId) {
+      const o = state.orders.find(x => x.id === orderId);
+      if (!o) return;
+      const pv = document.getElementById('printViewport');
+      pv.innerHTML = `
+        <div class="border-b-2 border-slate-900 pb-3 mb-4">
+          <h1 class="text-xl font-extrabold">CV. MUSTOFA JAYA TEKNIK</h1>
+          <p class="text-xs">Spesialis Rewinding Motor Listrik, Generator &amp; Trafo · Standar Class H 200°C</p>
+        </div>
+        <h2 class="text-center font-bold bg-slate-100 py-1 mb-4">SURAT PERINTAH KERJA (${o.spkNumber})</h2>
+        <div class="text-xs space-y-2">
+          <div><strong>Pelanggan:</strong> ${o.customerCompany}</div>
+          <div><strong>Unit:</strong> ${o.brand} ${o.powerHp} HP (${o.powerKw} kW)</div>
+          <div><strong>Teknisi PIC:</strong> ${o.technicianName}</div>
+          <div><strong>Target Selesai:</strong> ${o.targetCompletionDate}</div>
+          <div><strong>Total Biaya:</strong> ${formatRupiah(o.grandTotal)}</div>
+        </div>
+      `;
+      window.print();
+    }
+
+    function closeModal() {
+      const overlay = document.getElementById('modalOverlay');
+      overlay.classList.add('hidden');
+      overlay.classList.remove('flex');
+    }
+
+    loadInitialData();
+  </script>
+</body>
+</html>

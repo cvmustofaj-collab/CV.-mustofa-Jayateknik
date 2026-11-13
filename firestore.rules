@@ -1,0 +1,634 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1 / Safety Net: Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Hardened Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isStr(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isNum(val) {
+      return val is int || val is float;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(ownerId) {
+      return isSignedIn() && request.auth.uid == ownerId;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'cvmustofaj@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() ||
+        (isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    // Entity Validation Helpers (Anti-Update-Gap)
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'role', 'status', 'department', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        isStr(data.displayName, 1, 120) &&
+        data.role in ['operator', 'technician', 'admin'] &&
+        (!('status' in data) || data.status in ['active', 'suspended']) &&
+        (!('department' in data) || isStr(data.department, 0, 100)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        isStr(data.email, 3, 254) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'grantedBy', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'grantedBy', 'createdAt']) &&
+        isValidId(data.uid) &&
+        isValidId(data.grantedBy) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidAccountInvite(data) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'email', 'displayName', 'role',
+          'department', 'status', 'claimedUid', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'email', 'displayName', 'role',
+          'department', 'status', 'claimedUid', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.ownerId) &&
+        isStr(data.email, 3, 254) &&
+        isStr(data.displayName, 1, 120) &&
+        data.role in ['operator', 'technician', 'admin'] &&
+        isStr(data.department, 0, 100) &&
+        data.status in ['active', 'suspended'] &&
+        isStr(data.claimedUid, 0, 128) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCustomer(data) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'name', 'company', 'phone', 'email',
+          'address', 'city', 'notes', 'totalOrdersCount', 'joinedDate',
+          'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'name', 'company', 'phone', 'email',
+          'address', 'city', 'notes', 'totalOrdersCount', 'joinedDate',
+          'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.ownerId) &&
+        isStr(data.name, 1, 120) &&
+        isStr(data.company, 1, 200) &&
+        isStr(data.phone, 1, 40) &&
+        isStr(data.email, 0, 150) &&
+        isStr(data.address, 0, 400) &&
+        isStr(data.city, 0, 100) &&
+        isStr(data.notes, 0, 1000) &&
+        isNum(data.totalOrdersCount) &&
+        data.totalOrdersCount >= 0 &&
+        data.totalOrdersCount <= 100000 &&
+        isStr(data.joinedDate, 0, 32) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidInventoryItem(data) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'code', 'name', 'category', 'spec',
+          'currentStock', 'unit', 'minStockAlert', 'unitCost', 'sellingPrice',
+          'supplier', 'lastUpdated', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'code', 'name', 'category', 'spec',
+          'currentStock', 'unit', 'minStockAlert', 'unitCost', 'sellingPrice',
+          'supplier', 'lastUpdated', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.ownerId) &&
+        isStr(data.code, 1, 64) &&
+        isStr(data.name, 1, 200) &&
+        data.category in ['Kawat Tembaga', 'Isolasi & Vernis', 'Bearing', 'Aksesoris & Part'] &&
+        isStr(data.spec, 0, 300) &&
+        isNum(data.currentStock) && data.currentStock >= 0 &&
+        isStr(data.unit, 1, 32) &&
+        isNum(data.minStockAlert) && data.minStockAlert >= 0 &&
+        isNum(data.unitCost) && data.unitCost >= 0 &&
+        isNum(data.sellingPrice) && data.sellingPrice >= 0 &&
+        isStr(data.supplier, 0, 200) &&
+        isStr(data.lastUpdated, 0, 32) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidInspection(insp) {
+      return insp is map &&
+        insp.keys().hasAll([
+          'visualCondition', 'meggerInitialBodyMOhm', 'bearingFrontCondition',
+          'bearingRearCondition', 'rotorCondition', 'shaftRunoutMm'
+        ]) &&
+        insp.keys().hasOnly([
+          'visualCondition', 'meggerInitialBodyMOhm', 'bearingFrontCondition',
+          'bearingRearCondition', 'rotorCondition', 'shaftRunoutMm'
+        ]) &&
+        isStr(insp.visualCondition, 0, 500) &&
+        isNum(insp.meggerInitialBodyMOhm) && insp.meggerInitialBodyMOhm >= 0 &&
+        insp.bearingFrontCondition in ['Bagus', 'Kocak / Aus', 'Pecah / Macet', 'Wajib Ganti'] &&
+        insp.bearingRearCondition in ['Bagus', 'Kocak / Aus', 'Pecah / Macet', 'Wajib Ganti'] &&
+        isStr(insp.rotorCondition, 0, 300) &&
+        isNum(insp.shaftRunoutMm) && insp.shaftRunoutMm >= 0;
+    }
+
+    function isValidWindingData(wd) {
+      return wd is map &&
+        wd.keys().hasAll([
+          'slotsCount', 'polesCount', 'pitchCoil', 'wireSizeMm', 'wireSizeAlternative',
+          'turnsPerSlot', 'parallelWires', 'windingType', 'insulationClass',
+          'insulationMaterial', 'copperWeightKg', 'bakingVarnishType',
+          'bakingDurationHours', 'bakingTempC', 'connectionType'
+        ]) &&
+        wd.keys().hasOnly([
+          'slotsCount', 'polesCount', 'pitchCoil', 'wireSizeMm', 'wireSizeAlternative',
+          'turnsPerSlot', 'parallelWires', 'windingType', 'insulationClass',
+          'insulationMaterial', 'copperWeightKg', 'bakingVarnishType',
+          'bakingDurationHours', 'bakingTempC', 'connectionType'
+        ]) &&
+        isNum(wd.slotsCount) && wd.slotsCount >= 0 &&
+        isNum(wd.polesCount) && wd.polesCount >= 0 &&
+        isStr(wd.pitchCoil, 0, 64) &&
+        isNum(wd.wireSizeMm) && wd.wireSizeMm >= 0 &&
+        isStr(wd.wireSizeAlternative, 0, 200) &&
+        isNum(wd.turnsPerSlot) && wd.turnsPerSlot >= 0 &&
+        isNum(wd.parallelWires) && wd.parallelWires >= 0 &&
+        wd.windingType in ['Lap Winding', 'Concentric', 'Wave Winding', 'Double Layer', 'Single Layer'] &&
+        wd.insulationClass in ['Class B (130°C)', 'Class F (155°C)', 'Class H (180°C - 200°C)'] &&
+        isStr(wd.insulationMaterial, 0, 250) &&
+        isNum(wd.copperWeightKg) && wd.copperWeightKg >= 0 &&
+        isStr(wd.bakingVarnishType, 0, 200) &&
+        isNum(wd.bakingDurationHours) && wd.bakingDurationHours >= 0 &&
+        isNum(wd.bakingTempC) && wd.bakingTempC >= 0 &&
+        wd.connectionType in ['Star (Y)', 'Delta (Δ)', 'Star-Delta (Y-Δ)', 'Series', 'Parallel'];
+    }
+
+    function isValidQCReport(qc) {
+      return qc is map &&
+        qc.keys().hasAll([
+          'testedAt', 'testedBy', 'meggerPhasePhaseMOhm', 'meggerPhaseBodyMOhm',
+          'windingResistanceOhm', 'resistanceBalancePercent', 'noLoadTest',
+          'summaryVerdict', 'notes'
+        ]) &&
+        qc.keys().hasOnly([
+          'testedAt', 'testedBy', 'meggerPhasePhaseMOhm', 'meggerPhaseBodyMOhm',
+          'windingResistanceOhm', 'resistanceBalancePercent', 'noLoadTest',
+          'summaryVerdict', 'notes'
+        ]) &&
+        isStr(qc.testedAt, 0, 64) &&
+        isStr(qc.testedBy, 0, 120) &&
+        qc.meggerPhasePhaseMOhm is map &&
+        qc.meggerPhasePhaseMOhm.keys().hasAll(['uv', 'vw', 'wu']) &&
+        qc.meggerPhasePhaseMOhm.keys().hasOnly(['uv', 'vw', 'wu']) &&
+        isNum(qc.meggerPhasePhaseMOhm.uv) && isNum(qc.meggerPhasePhaseMOhm.vw) && isNum(qc.meggerPhasePhaseMOhm.wu) &&
+        qc.meggerPhaseBodyMOhm is map &&
+        qc.meggerPhaseBodyMOhm.keys().hasAll(['uBody', 'vBody', 'wBody']) &&
+        qc.meggerPhaseBodyMOhm.keys().hasOnly(['uBody', 'vBody', 'wBody']) &&
+        isNum(qc.meggerPhaseBodyMOhm.uBody) && isNum(qc.meggerPhaseBodyMOhm.vBody) && isNum(qc.meggerPhaseBodyMOhm.wBody) &&
+        qc.windingResistanceOhm is map &&
+        qc.windingResistanceOhm.keys().hasAll(['u', 'v', 'w']) &&
+        qc.windingResistanceOhm.keys().hasOnly(['u', 'v', 'w']) &&
+        isNum(qc.windingResistanceOhm.u) && isNum(qc.windingResistanceOhm.v) && isNum(qc.windingResistanceOhm.w) &&
+        isNum(qc.resistanceBalancePercent) &&
+        qc.noLoadTest is map &&
+        qc.noLoadTest.keys().hasAll([
+          'voltageRS', 'voltageST', 'voltageTR', 'currentR', 'currentS', 'currentT',
+          'currentBalanceStatus', 'rpmMeasured', 'bearingVibrationMmS', 'bearingTempC', 'noiseDb'
+        ]) &&
+        qc.noLoadTest.keys().hasOnly([
+          'voltageRS', 'voltageST', 'voltageTR', 'currentR', 'currentS', 'currentT',
+          'currentBalanceStatus', 'rpmMeasured', 'bearingVibrationMmS', 'bearingTempC', 'noiseDb'
+        ]) &&
+        qc.noLoadTest.currentBalanceStatus in ['PASS', 'WARNING', 'FAIL'] &&
+        isNum(qc.noLoadTest.voltageRS) && isNum(qc.noLoadTest.voltageST) && isNum(qc.noLoadTest.voltageTR) &&
+        isNum(qc.noLoadTest.currentR) && isNum(qc.noLoadTest.currentS) && isNum(qc.noLoadTest.currentT) &&
+        isNum(qc.noLoadTest.rpmMeasured) && isNum(qc.noLoadTest.bearingVibrationMmS) &&
+        isNum(qc.noLoadTest.bearingTempC) && isNum(qc.noLoadTest.noiseDb) &&
+        qc.summaryVerdict in ['LAYAK OPERASI (LULUS QC)', 'PERLU RE-CHECK', 'REJECT'] &&
+        isStr(qc.notes, 0, 1000);
+    }
+
+    function isValidWorkOrder(data) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'spkNumber', 'entryDate', 'targetCompletionDate',
+          'actualCompletionDate', 'customerId', 'customerName', 'customerCompany',
+          'customerPhone', 'customerAddress', 'machineType', 'brand', 'modelOrType',
+          'serialNumber', 'powerHp', 'powerKw', 'rpm', 'voltage', 'frequencyHz',
+          'currentAmpereRated', 'frameSize', 'cosPhi', 'ipRating', 'complaint',
+          'inspection', 'windingData', 'qcReport', 'status', 'priority',
+          'technicianName', 'serviceItems', 'laborCost', 'partsCost', 'discount',
+          'taxPpnPercent', 'grandTotal', 'downPayment', 'balanceDue', 'paymentStatus',
+          'warrantyMonths', 'warrantyNotes', 'statusAuditLog', 'lastStatusUpdated',
+          'lastStatusUpdatedBy', 'workshopNotes', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'spkNumber', 'entryDate', 'targetCompletionDate',
+          'actualCompletionDate', 'customerId', 'customerName', 'customerCompany',
+          'customerPhone', 'customerAddress', 'machineType', 'brand', 'modelOrType',
+          'serialNumber', 'powerHp', 'powerKw', 'rpm', 'voltage', 'frequencyHz',
+          'currentAmpereRated', 'frameSize', 'cosPhi', 'ipRating', 'complaint',
+          'inspection', 'windingData', 'qcReport', 'status', 'priority',
+          'technicianName', 'invoiceNumber', 'invoiceDate', 'fakturPajakNumber',
+          'serviceItems', 'laborCost', 'partsCost', 'discount',
+          'taxPpnPercent', 'taxPpnAmount', 'taxPphPercent', 'taxPphAmount',
+          'grandTotal', 'netPayableTotal', 'downPayment', 'balanceDue', 'paymentStatus',
+          'warrantyMonths', 'warrantyNotes', 'statusAuditLog', 'lastStatusUpdated',
+          'lastStatusUpdatedBy', 'workshopNotes', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.ownerId) &&
+        isStr(data.spkNumber, 1, 64) &&
+        isStr(data.entryDate, 1, 32) &&
+        isStr(data.targetCompletionDate, 1, 32) &&
+        isStr(data.actualCompletionDate, 0, 32) &&
+        isStr(data.customerId, 0, 128) &&
+        isStr(data.customerName, 1, 120) &&
+        isStr(data.customerCompany, 1, 200) &&
+        isStr(data.customerPhone, 0, 40) &&
+        isStr(data.customerAddress, 0, 400) &&
+        data.machineType in [
+          'Motor 3 Fasa Induksi', 'Motor 1 Fasa', 'Generator / Alternator Genset',
+          'Transformator (Trafo)', 'Pompa Submersible / Celup', 'Armature / DC Motor',
+          'Rotor Slip Ring'
+        ] &&
+        isStr(data.brand, 1, 120) &&
+        isStr(data.modelOrType, 0, 120) &&
+        isStr(data.serialNumber, 0, 120) &&
+        isNum(data.powerHp) && data.powerHp >= 0 &&
+        isNum(data.powerKw) && data.powerKw >= 0 &&
+        isNum(data.rpm) && data.rpm >= 0 &&
+        isStr(data.voltage, 0, 64) &&
+        isNum(data.frequencyHz) && data.frequencyHz >= 0 &&
+        isNum(data.currentAmpereRated) && data.currentAmpereRated >= 0 &&
+        isStr(data.frameSize, 0, 64) &&
+        isNum(data.cosPhi) && data.cosPhi >= 0 && data.cosPhi <= 1.5 &&
+        isStr(data.ipRating, 0, 32) &&
+        isStr(data.complaint, 0, 1000) &&
+        isValidInspection(data.inspection) &&
+        isValidWindingData(data.windingData) &&
+        isValidQCReport(data.qcReport) &&
+        data.status in [
+          'Diterima', 'Bongkar & Inspeksi', 'Proses Rewinding', 'Varnish & Oven',
+          'Assembling', 'QC & Pengetesan', 'Selesai & Siap Diambil', 'Diserahkan / Faktur'
+        ] &&
+        data.priority in ['Biasa', 'Penting', 'Urgent / Lembur'] &&
+        isStr(data.technicianName, 1, 120) &&
+        (!('invoiceNumber' in data) || isStr(data.invoiceNumber, 0, 64)) &&
+        (!('invoiceDate' in data) || isStr(data.invoiceDate, 0, 32)) &&
+        (!('fakturPajakNumber' in data) || isStr(data.fakturPajakNumber, 0, 64)) &&
+        data.serviceItems is list &&
+        data.serviceItems.size() <= 50 &&
+        (data.serviceItems.size() == 0 || data.serviceItems[0] is map) &&
+        isNum(data.laborCost) && data.laborCost >= 0 &&
+        isNum(data.partsCost) && data.partsCost >= 0 &&
+        isNum(data.discount) && data.discount >= 0 &&
+        isNum(data.taxPpnPercent) && data.taxPpnPercent >= 0 && data.taxPpnPercent <= 100 &&
+        (!('taxPpnAmount' in data) || (isNum(data.taxPpnAmount) && data.taxPpnAmount >= 0)) &&
+        (!('taxPphPercent' in data) || (isNum(data.taxPphPercent) && data.taxPphPercent >= 0 && data.taxPphPercent <= 100)) &&
+        (!('taxPphAmount' in data) || (isNum(data.taxPphAmount) && data.taxPphAmount >= 0)) &&
+        isNum(data.grandTotal) && data.grandTotal >= 0 &&
+        (!('netPayableTotal' in data) || (isNum(data.netPayableTotal) && data.netPayableTotal >= 0)) &&
+        isNum(data.downPayment) && data.downPayment >= 0 &&
+        isNum(data.balanceDue) && data.balanceDue >= 0 &&
+        data.paymentStatus in ['Lunas', 'DP / Sebagian', 'Belum Bayar'] &&
+        isNum(data.warrantyMonths) && data.warrantyMonths >= 0 && data.warrantyMonths <= 120 &&
+        isStr(data.warrantyNotes, 0, 1000) &&
+        data.statusAuditLog is list &&
+        data.statusAuditLog.size() <= 100 &&
+        (data.statusAuditLog.size() == 0 || data.statusAuditLog[0] is map) &&
+        isStr(data.lastStatusUpdated, 0, 80) &&
+        isStr(data.lastStatusUpdatedBy, 0, 120) &&
+        isStr(data.workshopNotes, 0, 2000) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'reportType', 'title', 'referenceNumber', 'orderId',
+          'customerCompany', 'technicianOrActor', 'summary', 'verdictOrStatus',
+          'amountRp', 'copperKg', 'meggerMOhm', 'metrics', 'sourceAction',
+          'reportDate', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'reportType', 'title', 'referenceNumber', 'orderId',
+          'customerCompany', 'technicianOrActor', 'summary', 'verdictOrStatus',
+          'amountRp', 'copperKg', 'meggerMOhm', 'metrics', 'sourceAction',
+          'reportDate', 'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.ownerId) &&
+        data.reportType in [
+          'SPK_CREATED', 'QC_MEGGER_TEST', 'STATUS_AUDIT',
+          'REVENUE_INVOICE', 'DOCUMENT_EXPORTED', 'INVENTORY_ADJUSTMENT', 'CUSTOMER_ADDED'
+        ] &&
+        isStr(data.title, 1, 200) &&
+        isStr(data.referenceNumber, 1, 100) &&
+        isStr(data.orderId, 0, 128) &&
+        isStr(data.customerCompany, 0, 200) &&
+        isStr(data.technicianOrActor, 1, 120) &&
+        isStr(data.summary, 1, 1000) &&
+        isStr(data.verdictOrStatus, 1, 100) &&
+        isNum(data.amountRp) && data.amountRp >= 0 &&
+        isNum(data.copperKg) && data.copperKg >= 0 &&
+        isNum(data.meggerMOhm) && data.meggerMOhm >= 0 &&
+        data.metrics is map && data.metrics.keys().size() <= 25 &&
+        isStr(data.sourceAction, 1, 100) &&
+        isStr(data.reportDate, 1, 32) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidWorkshopSettings(data) {
+      return data.keys().hasAll([
+          'id', 'ownerId', 'monthlySpkTarget', 'perTechMonthlyTarget',
+          'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'ownerId', 'monthlySpkTarget', 'perTechMonthlyTarget',
+          'googleSpreadsheetId', 'googleSpreadsheetTitle', 'googleSpreadsheetUrl',
+          'googleSheetsAutoSync', 'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.ownerId) &&
+        data.monthlySpkTarget is int &&
+        data.monthlySpkTarget >= 1 &&
+        data.monthlySpkTarget <= 500 &&
+        data.perTechMonthlyTarget is int &&
+        data.perTechMonthlyTarget >= 1 &&
+        data.perTechMonthlyTarget <= 200 &&
+        (!('googleSpreadsheetId' in data) || isStr(data.googleSpreadsheetId, 0, 200)) &&
+        (!('googleSpreadsheetTitle' in data) || isStr(data.googleSpreadsheetTitle, 0, 200)) &&
+        (!('googleSpreadsheetUrl' in data) || isStr(data.googleSpreadsheetUrl, 0, 500)) &&
+        (!('googleSheetsAutoSync' in data) || data.googleSheetsAutoSync is bool) &&
+        isStr(data.updatedBy, 1, 120) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // Collection: /users/{userId} (Non-PII profile)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && (existing().uid == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser() && isValidId(userId) && isValidUserProfile(incoming()) &&
+        isOwner(userId) &&
+        incoming().uid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (incoming().role in ['operator', 'technician'] || isBootstrappedAdmin());
+      allow update: if isVerifiedUser() && isValidId(userId) && isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (isOwner(userId) && incoming().role == existing().role &&
+            (!('status' in existing()) || !('status' in incoming()) || incoming().status == existing().status) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'department', 'updatedAt'])) ||
+          (isAdmin() &&
+            (incoming().role != 'admin' || isBootstrappedAdmin() || existing().role == 'admin') &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'role', 'status', 'department', 'updatedAt']))
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+
+      match /private/{infoId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(infoId) && (isOwner(userId) || isAdmin());
+        allow list: if isSignedIn() && isValidId(userId) && (existing().uid == request.auth.uid || isBootstrappedAdmin());
+        allow create: if isVerifiedUser() && isValidId(userId) && isValidId(infoId) &&
+          isValidUserPrivateInfo(incoming()) &&
+          isOwner(userId) &&
+          incoming().uid == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isVerifiedUser() && isValidId(userId) && isValidId(infoId) &&
+          isValidUserPrivateInfo(incoming()) &&
+          (isOwner(userId) || isAdmin()) &&
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['email', 'updatedAt']);
+        allow delete: if isAdmin() && isValidId(userId) && isValidId(infoId);
+      }
+    }
+
+    // Collection: /admins/{userId}
+    match /admins/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isBootstrappedAdmin() && isValidId(userId) &&
+        isValidAdminRecord(incoming()) &&
+        incoming().uid == userId &&
+        incoming().grantedBy == request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isBootstrappedAdmin() && isValidId(userId);
+    }
+
+    // Collection: /accountInvites/{inviteId}
+    match /accountInvites/{inviteId} {
+      allow get: if isVerifiedUser() && isValidId(inviteId) &&
+        (isAdmin() || existing().email == request.auth.token.email);
+      allow list: if isVerifiedUser() &&
+        (isBootstrappedAdmin() || existing().email == request.auth.token.email);
+      allow create: if isAdmin() && isValidId(inviteId) &&
+        isValidAccountInvite(incoming()) &&
+        incoming().id == inviteId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(inviteId) &&
+        isValidAccountInvite(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'email', 'displayName', 'role', 'department', 'status', 'claimedUid', 'updatedAt'
+          ])) ||
+          (existing().email == request.auth.token.email &&
+            incoming().claimedUid == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['claimedUid', 'updatedAt']))
+        );
+      allow delete: if isAdmin() && isValidId(inviteId);
+    }
+
+    // Collection: /customers/{customerId}
+    match /customers/{customerId} {
+      allow get: if isSignedIn() && isValidId(customerId) && (isOwner(existing().ownerId) || isAdmin());
+      allow list: if isSignedIn() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser() && isValidId(customerId) &&
+        isValidCustomer(incoming()) &&
+        incoming().id == customerId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(customerId) &&
+        isValidCustomer(incoming()) &&
+        (isOwner(existing().ownerId) || isAdmin()) &&
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (incoming().diff(existing()).affectedKeys().hasOnly(['totalOrdersCount', 'updatedAt'])) ||
+          (incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'company', 'phone', 'email', 'address', 'city',
+            'notes', 'totalOrdersCount', 'joinedDate', 'updatedAt'
+          ]))
+        );
+      allow delete: if isVerifiedUser() && isValidId(customerId) && (isOwner(existing().ownerId) || isAdmin());
+    }
+
+    // Collection: /inventory/{itemId}
+    match /inventory/{itemId} {
+      allow get: if isSignedIn() && isValidId(itemId) && (isOwner(existing().ownerId) || isAdmin());
+      allow list: if isSignedIn() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser() && isValidId(itemId) &&
+        isValidInventoryItem(incoming()) &&
+        incoming().id == itemId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(itemId) &&
+        isValidInventoryItem(incoming()) &&
+        (isOwner(existing().ownerId) || isAdmin()) &&
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          (incoming().diff(existing()).affectedKeys().hasOnly(['currentStock', 'lastUpdated', 'updatedAt'])) ||
+          (incoming().diff(existing()).affectedKeys().hasOnly([
+            'code', 'name', 'category', 'spec', 'currentStock', 'unit',
+            'minStockAlert', 'unitCost', 'sellingPrice', 'supplier', 'lastUpdated', 'updatedAt'
+          ]))
+        );
+      allow delete: if isVerifiedUser() && isValidId(itemId) && (isOwner(existing().ownerId) || isAdmin());
+    }
+
+    // Collection: /workOrders/{orderId}
+    match /workOrders/{orderId} {
+      allow get: if isSignedIn() && isValidId(orderId) && (isOwner(existing().ownerId) || isAdmin());
+      allow list: if isSignedIn() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser() && isValidId(orderId) &&
+        isValidWorkOrder(incoming()) &&
+        incoming().id == orderId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(orderId) &&
+        isValidWorkOrder(incoming()) &&
+        (isOwner(existing().ownerId) || isAdmin()) &&
+        (existing().status != 'Diserahkan / Faktur' || isAdmin()) &&
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'status', 'actualCompletionDate', 'statusAuditLog',
+            'lastStatusUpdated', 'lastStatusUpdatedBy', 'updatedAt'
+          ]) ||
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'qcReport', 'status', 'actualCompletionDate', 'statusAuditLog',
+            'lastStatusUpdated', 'lastStatusUpdatedBy', 'updatedAt'
+          ]) ||
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'spkNumber', 'entryDate', 'targetCompletionDate', 'actualCompletionDate',
+            'customerId', 'customerName', 'customerCompany', 'customerPhone',
+            'customerAddress', 'machineType', 'brand', 'modelOrType', 'serialNumber',
+            'powerHp', 'powerKw', 'rpm', 'voltage', 'frequencyHz', 'currentAmpereRated',
+            'frameSize', 'cosPhi', 'ipRating', 'complaint', 'inspection', 'windingData',
+            'qcReport', 'status', 'priority', 'technicianName',
+            'invoiceNumber', 'invoiceDate', 'fakturPajakNumber', 'serviceItems',
+            'laborCost', 'partsCost', 'discount', 'taxPpnPercent', 'taxPpnAmount',
+            'taxPphPercent', 'taxPphAmount', 'grandTotal', 'netPayableTotal',
+            'downPayment', 'balanceDue', 'paymentStatus', 'warrantyMonths',
+            'warrantyNotes', 'statusAuditLog', 'lastStatusUpdated',
+            'lastStatusUpdatedBy', 'workshopNotes', 'updatedAt'
+          ])
+        );
+      allow delete: if isVerifiedUser() && isValidId(orderId) && (isOwner(existing().ownerId) || isAdmin());
+    }
+
+    // Collection: /reports/{reportId} (Immutable Automatic Reports Archive)
+    match /reports/{reportId} {
+      allow get: if isSignedIn() && isValidId(reportId) && (isOwner(existing().ownerId) || isAdmin());
+      allow list: if isSignedIn() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser() && isValidId(reportId) &&
+        isValidReport(incoming()) &&
+        incoming().id == reportId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(reportId);
+    }
+
+    // Collection: /workshopSettings/{settingId}
+    match /workshopSettings/{settingId} {
+      allow get: if isSignedIn() && isValidId(settingId) && (isOwner(settingId) || isAdmin());
+      allow list: if isSignedIn() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow create: if isVerifiedUser() && isValidId(settingId) &&
+        isValidWorkshopSettings(incoming()) &&
+        isOwner(settingId) &&
+        incoming().id == settingId &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(settingId) &&
+        isValidWorkshopSettings(incoming()) &&
+        (isOwner(existing().ownerId) || isAdmin()) &&
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'monthlySpkTarget', 'perTechMonthlyTarget',
+          'googleSpreadsheetId', 'googleSpreadsheetTitle', 'googleSpreadsheetUrl',
+          'googleSheetsAutoSync', 'updatedBy', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(settingId);
+    }
+  }
+}
